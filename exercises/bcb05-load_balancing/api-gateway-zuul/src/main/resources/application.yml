@@ -1,0 +1,26 @@
+server:
+  port: 9998
+
+zuul:
+#  debug:
+#    request: true
+  routes:
+    banners:
+      path: /banners/**
+#      No direct url triggers hystrix and ribbon client (fallbackProvider)
+#      url: http://localhost:8081
+    api:
+      path: /api/**
+      stripPrefix: false
+      #TODO: instead of explicit url, Zuul can use `serviceId` which defined a RibbonClient for a particular service
+      url: http://localhost:8080/
+
+# increase hystrix default timeouts to allow additional http call in the filter
+hystrix.command.default.execution.isolation.thread.timeoutInMilliseconds: 10000
+
+banners:
+  ribbon:
+    listOfServers: localhost:8081
+
+
+# define rest of services (banners, profanity-filter) and provide a list of servers for each of them

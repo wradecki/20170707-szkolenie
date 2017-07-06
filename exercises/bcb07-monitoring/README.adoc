@@ -1,0 +1,212 @@
+= Distilling microservices patterns
+:imagesdir: https://raw.githubusercontent.com/kubamarchwicki/workshops-microservices-patterns/master/_slides/src/images/
+:toc:
+
+Welcome to microservices patterns workshop.
+This workshop is intended to guide you through multiple microservice patterns, based on modularising a simplistic _TODO application(TM)_.
+
+== Before we start
+
+For sanity, when setting up a new task, start with `mvn install` with the parent `pom`
+
+== Splitting up monoliths
+
+image::tasks-external_ui.png[]
+
+There is a TODO application: two independent services talking over HTTP (REST): *todo-app* and *todo-app-ui*
+
+=== Context
+
+The *todo-app*(TM) is a simple TODO application built in a old-school way: EJB components with servlets and JSF sitting on a single application server (wildfly).
+You can run the server with `mvn wildfly:run` and _play a bit with the app_ by browsing to http://localhost:8080/index.jsf
+
+However, as the business evolves - the UI is planned to be replaced by a modern, JavaScript based frontend application. As a part of refactoring initiative a new front-end has be designed and implemented: `todo-ui`, which is a Single Page Application, with an idea to communicate with the old application through a set of REST-like HTTP calls.
+The front end can be run independently by running `npm start` from *todo-app-ui* folder.
+
+=== Task #{counter:exercise}
+
+Based on the defined interfaces, extend the existing application and provide a set of required API.
+
+What additional changes needs to be done to allow application to application communication, when deployed separately? How can the application still be developed separately but deployed as a monolith?
+
+IMPORTANT: Implement the missing methods in the `TodoResource` class for the test to successfully pass.
+
+=== How to run
+
+The Pact is prepared by the JavaScript application. It states the expectation; what resources are expected from the provider.
+
+It's expressed as a Pact contract created in the test phase. The pact is than passed over to provider.
+
+The pact file is located in `todo-app/src/test/resources`. An Arquillian test is built to validate the contract (`TodoResourceProviderIT`)
+
+The test is run as a part of Intergration Testing phase which can be triggered with Maven's `mvn clean verify`. It spins wildfly instance on pre-integration phase and stops it during post-integration phase.
+
+TIP: The missing UI artifact `com.example.patterns:todo-app-ui` can be buld with `mvn clean install` in the todo-app-ui folder.
+
+TIP: If you experience some nodejs issues while building the frontend application you can install it directly from file `mvn install:install-file -DgroupId=com.example.patterns -DartifactId=todo-ui -Dversion=1.0-SNAPSHOT -Dpackaging=jar -Dfile=todo-app-ui-1.0-SNAPSHOT.jar` when in folder `todo-app-ui`
+
+== API Gateway
+
+image::tasks-banner_service.png[]
+
+The _TODO application(TM)_ become a great success, so that business wants to monetize the business by adding commercial banners on the top of the page.
+
+=== Context
+
+A new service has been added to the pool: a todo page displays a commercial banner provider directly from a service owned by the marketing department.
+The functionality is provided by a *banners-service* service, which is a _full stack microservice_ - provides a random image, ready to include directly onto the todo page.
+
+=== Task #{counter:exercise}
+
+Introduce an API gateway - a new component which hosts the UI and routes appropriate requests to services:
+
+- `/banners/**` are forwarded to the *banners-service* (http://localhost:8081)
+- `/api/**` calls are forwarded to the legacy application - *todo-app* (http://localhost:8080)
+
+IMPORTANT: Implement the missing TODOs in `GatewayApp.java` in the *api-gateway* project
+
+=== How to run
+
+To start the gateway run `mvn spring-boot:run` from *api-gateway* project. The gateway listens on the port 9999.
+
+Banner service is a simple Spark Java micro framework. Run it from *banners-service* folder with `mvn package exec:java` command.
+
+TIP: Remember that UI has changed (new banners) so UI needs to be rebuilt. If you have problems with building the UI directly with nodejs, install the jar file again (`mvn install:install-file -DgroupId=com.example.patterns -DartifactId=todo-app-ui -Dversion=1.0-SNAPSHOT -Dpackaging=jar -Dfile=todo-app-ui-1.0-SNAPSHOT.jar`) from `todo-app-ui` folder.
+
+== Circuit breaking
+
+image::tasks-banner_service.png[]
+
+The quality of the *banners-service* is below expectations and it fail frequently.
+
+=== Context
+
+The ads providing services goes offline on regular basis.
+From _TODO application(TM)_ perspective this is not acceptable, as if results in a broken image icon on the front page.
+To mitigate that, a `default-banner.png` has been provided to substitute the missing image.
+
+=== Task #{counter:exercise}
+
+In the *api-gateway* implementation provide a fallback for a missing image (either on exception of with a dedicated tool like Hystrix or Failsafe).
+
+TIP: As the service provides an image directly, same "data structure" must be provided by the fallback mechanism (`byte[]`)
+
+TIP: Failsafe documentation (https://github.com/jhalterman/failsafe) is a nice guide for different implemantation flavours.
+
+IMPORTANT: Provide a default fallback option in the `GatewayApp#getBanners()` method.
+
+=== Task #{counter:exercise}
+
+While writing your own API Gateway might be a good idea, sometimes it becomes a bit cumbersome.
+There are multiple out of the box libraries implementing this pattern (like Neflix Zuul).
+
+Zuul provides configurable tooling for building a reverse proxy, especially with some Spring Cloud conventions.
+Additionally, it comes with circuit breaking and load balancing mechanism provided by another Netflix libraries: Hystrix and Ribbon (we will look deeper into these later on).
+
+IMPORTANT: Provide a default fallback mechanism (similar to the _in-house built_ *api-gateway* from the previous task. Please use `ZuulFallbackProvider` interface and provide it as a standard spring bean.
+
+=== How to run
+
+Run `mvn spring-boot:run` from *api-gateway-zuul* project. The gateway listens on the port 9999.
+
+== Load balancing
+
+image::tasks-profanity.png[]
+
+No profane words should be allowed in the *todo-app*; everything matching profanity checks should be filtered-out
+
+=== Context
+
+Additional service (*profnity-filter*) has been introduced in the application landscape.
+It handles `POST` or `PUT` calls, checks profanity with an external *profanity-check-service*, amends the title (if required) and passes the request to the *legacy* _TODO Application_(TM).
+
+=== Task #{counter:exercise}
+
+For performance reasons more than one *profanity-filter* service can be started and the load should be evenly distributed between all services.
+The *profanity-filter* service listens on a random port (to avoid ports collision).
+
+TIP: A quickstart reference manual from Spring is available here: https://spring.io/guides/gs/client-side-load-balancing/
+
+IMPORTANT: In the *api-gateway* application, use the Spring based RibbonClient (from `spring-cloud-starter-ribbon`) to easily load balance between instances. The static list of servers can be added in the application configuration file.
+
+=== Task #{counter:exercise}
+
+As our in-house implemented *api-gateway* is getting a bit more complex, maybe it's a good moment to have a look deeper look into out of the box tooling.
+In the *api-gateway-zuul* provide a static list of servers for each service (in the `application.properties` file - in a similar fashion it was done for *api-gateway*).
+Additionally, add an appropriate filter configuration (implementing `ZuulFilter`), to check `POST` or `PUT` requests and forward them to *profanity-filter* instead of the original *legacy* _TODO Application_(TM).
+
+IMPORTANT: Configure Netflix Zuul to evenly distribute load between all service instances.
+
+== Service discovery
+
+image::tasks-discovery.png[]
+
+The number of hardcode service locations (hostnames and/or ports) is unacceptably low: it make the deployments static and fragile.
+What is more, some ports are assigned randomly which makes the situation additionally complex.
+
+=== Context
+
+Eureka is a REST based service that is used for the purpose of load balancing and failover of middle-tier servers.
+When the number of services and instances increases greatly, it's impossible to manage embedded configuration.
+Eureka inverses this process, allowing service registrations as well as pulling the latest service location directly from store.
+
+In the our microservices environment the *profranity-filter* and *todo-app* are already auto register.
+*todo-app* through explicit call to Eureka HTTP service, while *profanity-filter* combines both automatic configuration (with `@EnableDiscoveryClient`) and manual configuration of services which are external (thus - don't register themselves).
+The latter is done through explicit `@RibbonClient` annotation.
+
+=== Task #{counter:exercise}
+
+To make the configuration consistent, introduce service discovery features in the rest of the services.
+*api-gateway* (or *api-gateway-zuul*) can leverage Spring Cloud autoconfiguration.
+
+TIP: The Spring's quickstart manual can give you heads up: https://spring.io/guides/gs/service-registration-and-discovery/
+
+IMPORTANT: Auto register the *api-gateway* through `@EnableDiscoverClient` annotation.
+
+=== Task #{counter:exercise}
+
+Unfortunately, the *banners-service* is not a spring application.
+That's why it requires an explicit eureka call, though the Eureka Client.
+
+TIP: Original Eureka Client example might be helpful to proceed: https://github.com/Netflix/eureka/tree/master/eureka-examples
+
+TIP: Besides Eureka Client dependency `com.netflix.eureka:eureka-client:1.6.2`, add `javax.inject:javax.inject:1` which is used for client's dependency injection engine.
+
+TIP: link:https://github.com/Netflix/eureka/wiki/Eureka-REST-operations[Eureka REST operations] and link:https://github.com/Netflix/eureka/wiki/Understanding-eureka-client-server-communication[description of client-server communication] might be helpful for debugging and manual cancellation
+
+=== How to run
+
+Run the discovery service through `mvn spring-boot:run -f registry`.
+
+TIP: Lookup registered application at http://localhost:8761/eureka/apps
+
+== Monitoring
+
+// stackdriver: https://medium.com/google-cloud/distributed-tracing-spring-boot-microservices-with-stackdriver-trace-7fe42c6de3f3
+
+=== Task #{counter:exercise}
+
+Include `profanity-filter` service in zipkin monitoring.
+
+TIP: This is a spring-boot application, so adding appropriate spring-cloud dependency should do the job
+
+=== Task #{counter:exercise}
+
+Include `banners-service` in zipkin monitoring.
+This is a non-spring project so OpenZipkin instrumentation library is recommended.
+There are dedicated libraries for different frameworks (like one for JAXRS - used in *todo-app*; lookup `RestApplication` class for inspiration).
+
+Banners service is based on SparkJava so pickup the right instrumentation library from https://github.com/openzipkin/brave/tree/master/instrumentation and use accordingly.
+
+=== Task #{counter:exercise}
+
+Calling external `profanity-check-service` is not explicitly logged with Zipkin annotation. However, you can create additional Span through API.
+Add span for calling external service and log appropriate 'Client Sent' and 'Client Received' events
+
+TIP: Spring Sleuth documentation is quite comprehensive in that matter. https://cloud.spring.io/spring-cloud-sleuth/spring-cloud-sleuth.html#_span_lifecycle
+
+=== How to run
+
+Run Zipkin through `mvn spring-boot:run -f zipkin`
+
+TIP: Zipkin UI runs by default at http://localhost:9411
