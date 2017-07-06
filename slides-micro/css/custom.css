@@ -1,0 +1,28 @@
+
+
+/*.title {
+    font-weight: bold;
+    font-size: 1.2em;
+}
+
+#command-query-table {
+	border-collapse: collapse;
+}
+
+#command-query-table td, th {
+  border: 3px solid #999;
+  padding-top: 1em;
+}
+
+td.halign-center, th.halign-center {
+	text-align: center;
+}
+
+td.valign-middle, th.valign-middle {
+	vertical-align: middle;
+}
+
+li p {
+	margin-bottom: 0px !important;
+}
+*/
