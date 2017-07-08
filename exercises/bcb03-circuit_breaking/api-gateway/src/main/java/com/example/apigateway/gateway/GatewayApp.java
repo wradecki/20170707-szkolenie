@@ -1,30 +1,32 @@
 package com.example.apigateway.gateway;
 
+import net.jodah.failsafe.CircuitBreaker;
+import net.jodah.failsafe.Failsafe;
+import net.jodah.failsafe.RetryPolicy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.*;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.util.StreamUtils;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.context.request.async.DeferredResult;
 import org.springframework.web.servlet.HandlerMapping;
 
 import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 @SpringBootApplication
 public class GatewayApp {
@@ -71,6 +73,8 @@ public class GatewayApp {
 @RestController
 class Controllers {
 
+    private static Logger logger = LoggerFactory.getLogger(Controllers.class);
+
     @Autowired
     RestTemplate rest;
 
@@ -80,14 +84,26 @@ class Controllers {
     @Autowired
     byte[] defaultBanner;
 
+    CircuitBreaker bannersCb = new CircuitBreaker()
+            .withDelay(1, TimeUnit.MINUTES)
+            .withFailureThreshold(2);
+
+
     @RequestMapping(value = "/banners", produces = MediaType.IMAGE_PNG_VALUE)
     public Future<byte[]> getBanners() {
         final String bannersUrl = "http://localhost:8081/";
 
-        //TODO: on failure return the default banner: "default-banner.png"
-        // from defaultBanner field
+        RetryPolicy rt = new RetryPolicy()
+                .withDelay(5, TimeUnit.SECONDS)
+                .withMaxRetries(2)
+                .retryOn(Exception.class);
 
-        return CompletableFuture.supplyAsync(() -> rest.getForObject(bannersUrl, byte[].class), exec);
+        return CompletableFuture.supplyAsync(()
+                    -> Failsafe.with(bannersCb).with(rt)
+                        .onFailure(t -> logger.warn("Connection error: ", t))
+                        .withFallback(defaultBanner)
+                        .get(()
+                                -> rest.getForObject(bannersUrl, byte[].class)), exec);
     }
 
     @RequestMapping(value = "/api/**", produces = MediaType.APPLICATION_JSON_VALUE)
