@@ -35,6 +35,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import javax.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
 
 @SpringBootApplication
 @EnableDiscoveryClient
@@ -69,12 +70,15 @@ class Controllers {
     @Autowired
     RestTemplate rest;
 
+    private ConcurrentHashMap<ObjectNode, ObjectNode> cache = new ConcurrentHashMap<>();
+
     @RequestMapping(method = {RequestMethod.PUT, RequestMethod.POST},
             value = "/api/**", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> foo(@RequestBody(required = false) ObjectNode payload,
                                       final HttpServletRequest request) {
 
-        ObjectNode newPayload = maskProfanityWords(payload);
+        RestTemplate rest = new RestTemplate();
+        ObjectNode newPayload = cache.computeIfAbsent(payload, k -> maskProfanityWords(k));
 
         final String legacyApiUrl = "http://legacy/";
         final String path = (String) request.getAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);

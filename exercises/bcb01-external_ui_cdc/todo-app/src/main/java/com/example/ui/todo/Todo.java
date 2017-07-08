@@ -9,6 +9,7 @@ public class Todo {
 	@XmlElement(name = "order")
 	private long priority;
 	private boolean completed;
+	private String foo;
 
 	public Todo() {
 	}
@@ -52,7 +53,15 @@ public class Todo {
 		this.completed = completed;
 	}
 
-	@Override
+    public String getFoo() {
+        return foo;
+    }
+
+    public void setFoo(String foo) {
+        this.foo = foo;
+    }
+
+    @Override
 	public boolean equals(Object o) {
 		if (this == o) return true;
 		if (o == null || getClass() != o.getClass()) return false;

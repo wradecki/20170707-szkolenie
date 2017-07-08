@@ -21,6 +21,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 
 @SpringBootApplication
 public class GatewayApp {
@@ -68,9 +69,10 @@ class Controllers {
     Executor exec;
 
     @RequestMapping(value = "/banners", produces = MediaType.IMAGE_PNG_VALUE)
-    public CompletableFuture<byte[]> getBanners(final HttpServletResponse response) {
+    public Future<byte[]> getBanners(final HttpServletResponse response) {
         final String bannersUrl = "http://localhost:8081/";
-        return CompletableFuture.supplyAsync(() -> rest.getForObject(bannersUrl, byte[].class), exec);
+        return CompletableFuture.supplyAsync(()
+                -> rest.getForObject(bannersUrl, byte[].class), exec);
     }
 
     @RequestMapping(value = "/api/**", produces = MediaType.APPLICATION_JSON_VALUE)

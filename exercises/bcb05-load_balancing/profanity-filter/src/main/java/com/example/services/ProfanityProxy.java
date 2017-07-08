@@ -17,10 +17,13 @@ import org.springframework.web.util.UriComponentsBuilder;
 import javax.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
 
 @SpringBootApplication
 @RestController
 public class ProfanityProxy {
+
+    private ConcurrentHashMap<ObjectNode, ObjectNode> cache = new ConcurrentHashMap<>();
 
     @RequestMapping(method = {RequestMethod.PUT, RequestMethod.POST},
             value = "/api/**", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -28,7 +31,7 @@ public class ProfanityProxy {
                     final HttpServletRequest request) {
 
         RestTemplate rest = new RestTemplate();
-        ObjectNode newPayload = maskProfanityWords(payload);
+        ObjectNode newPayload = cache.computeIfAbsent(payload, k -> maskProfanityWords(k));
 
         final String legacyApiUrl = "http://localhost:8080/";
         final String path = (String) request.getAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);
